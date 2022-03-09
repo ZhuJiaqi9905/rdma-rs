@@ -1,7 +1,8 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Error as IOError;
 use std::os::raw::c_int;
 use std::ptr::NonNull;
+use std::slice;
 
 use num_enum::TryFromPrimitive;
 
@@ -107,12 +108,50 @@ impl Drop for IbvContext {
 unsafe impl Send for IbvContext {}
 unsafe impl Sync for IbvContext {}
 
-
 impl IbvDeviceAttr {
-   
+    #[inline(always)]
+    pub fn get_fw_ver(&self) -> &str {
+        let mut i = 0;
+        while i < self.fw_ver.len() {
+            if self.fw_ver[i] as u8 == b'\0' {
+                break;
+            }
+            i += 1;
+        }
+        let s = unsafe { slice::from_raw_parts(self.fw_ver.as_ptr() as *const u8, i + 1) };
+        let cstr = CStr::from_bytes_with_nul(s).unwrap();
+        cstr.to_str().unwrap()
+    }
+    #[inline(always)]
+    pub fn get_node_guid(&self) -> u64 {
+        self.node_guid
+    }
+    #[inline(always)]
+    pub fn get_sys_image_guid(&self) -> u64 {
+        self.sys_image_guid
+    }
+    #[inline(always)]
+    pub fn get_max_mr_size(&self) -> u64 {
+        self.max_mr_size
+    }
+    #[inline(always)]
+    pub fn get_page_size_cap(&self) -> u64 {
+        self.page_size_cap
+    }
+    #[inline(always)]
+    pub fn get_vendor_id(&self) -> u32 {
+        self.vendor_id
+    }
+    #[inline(always)]
+    pub fn get_vendor_part_id(&self) -> u32 {
+        self.vendor_part_id
+    }
+    #[inline(always)]
+    pub fn get_hw_ver(&self) -> u32 {
+        self.hw_ver
+    }
     #[inline(always)]
     pub fn get_max_qp(&self) -> i32 {
-        todo!("fw_ver 2 hw_ver");
         self.max_qp
     }
     #[inline(always)]
