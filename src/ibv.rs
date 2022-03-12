@@ -4,6 +4,7 @@ use std::os::raw::c_int;
 use std::ptr::NonNull;
 use std::slice;
 
+use libc::c_void;
 use num_enum::TryFromPrimitive;
 
 use crate::error::IbvContextError;
@@ -11,13 +12,15 @@ use crate::ffi;
 
 pub type IbvDeviceAttr = ffi::ibv_device_attr;
 pub type IbvPortAttr = ffi::ibv_port_attr;
+pub type IbvGid = ffi::ibv_gid;
+pub type IbvWc = ffi::ibv_wc;
 #[derive(Clone)]
 pub struct IbvContext {
     ibv_context: NonNull<ffi::ibv_context>,
 }
 
 impl IbvContext {
-    pub fn new(dev_name: Option<&str>) -> Result<IbvContext, IbvContextError> {
+    pub fn new(dev_name: Option<&str>) -> Result<Self, IbvContextError> {
         let mut num_devs: c_int = 0;
         let dev_list_ptr = unsafe { ffi::ibv_get_device_list(&mut num_devs) };
         // if there isn't any IB device in host
@@ -55,14 +58,16 @@ impl IbvContext {
         }
         // free the device list
         unsafe { ffi::ibv_free_device_list(dev_list_ptr) };
-        Ok(Self {
-            ibv_context: NonNull::new(ibv_context).unwrap(),
-        })
+        unsafe {
+            Ok(Self {
+                ibv_context: NonNull::new_unchecked(ibv_context),
+            })
+        }
     }
     pub fn query_device(&self) -> Result<IbvDeviceAttr, IOError> {
         let mut device_attr = unsafe { std::mem::zeroed::<IbvDeviceAttr>() };
         let ret = unsafe { ffi::ibv_query_device(self.ibv_context.as_ptr(), &mut device_attr) };
-        if ret == -1 {
+        if ret != 0 {
             return Err(IOError::last_os_error());
         }
         Ok(device_attr)
@@ -90,17 +95,47 @@ impl IbvContext {
                 &mut port_attr as *mut _ as *mut ffi::_compat_ibv_port_attr,
             )
         };
-        if ret == -1 {
+        if ret != 0 {
             return Err(IOError::last_os_error());
         }
         Ok(port_attr)
+    }
+    pub fn query_gid(&self, port_num: u8, index: i32) -> Result<IbvGid, IOError> {
+        let mut gid = IbvGid { raw: [0; 16] };
+        let ret = unsafe {
+            ffi::ibv_query_gid(
+                self.ibv_context.as_ptr(),
+                port_num,
+                index,
+                &mut gid as *mut _,
+            )
+        };
+        if ret != 0 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(gid)
+    }
+    pub fn query_pkey(&self, port_num: u8, index: i32) -> Result<u16, IOError> {
+        let mut pkey = 0_u16;
+        let ret = unsafe {
+            ffi::ibv_query_pkey(
+                self.ibv_context.as_ptr(),
+                port_num,
+                index,
+                &mut pkey as *mut _,
+            )
+        };
+        if ret != 0 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(pkey)
     }
 }
 
 impl Drop for IbvContext {
     fn drop(&mut self) {
         let ret = unsafe { ffi::ibv_close_device(self.ibv_context.as_ptr()) };
-        if ret == -1 {
+        if ret != 0 {
             panic!("ibv_close_device(). errno: {}", IOError::last_os_error());
         }
     }
@@ -108,6 +143,142 @@ impl Drop for IbvContext {
 unsafe impl Send for IbvContext {}
 unsafe impl Sync for IbvContext {}
 
+#[derive(Clone)]
+pub struct IbvPd {
+    pub ibv_pd: NonNull<ffi::ibv_pd>,
+}
+
+impl IbvPd {
+    pub fn new(context: &IbvContext) -> Result<Self, IOError> {
+        let ibv_pd = unsafe { ffi::ibv_alloc_pd(context.ibv_context.as_ptr()) };
+        if ibv_pd.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(Self {
+                ibv_pd: NonNull::new_unchecked(ibv_pd),
+            })
+        }
+    }
+}
+
+impl Drop for IbvPd {
+    fn drop(&mut self) {
+        let ret = unsafe { ffi::ibv_dealloc_pd(self.ibv_pd.as_ptr()) };
+        if ret != 0 {
+            panic!("ibv_dealloc_pd(). errno: {}", IOError::last_os_error());
+        }
+    }
+}
+unsafe impl Send for IbvPd {}
+unsafe impl Sync for IbvPd {}
+
+#[derive(Clone)]
+pub struct IbvCq {
+    ibv_cq: NonNull<ffi::ibv_cq>,
+}
+
+impl IbvCq {
+    pub fn new<T>(
+        context: &IbvContext,
+        cqe: i32,
+        cq_context: Option<NonNull<T>>,
+        channel: Option<&IbvCompChannel>,
+        comp_vector: i32,
+    ) -> Result<Self, IOError> {
+        let cq_context = match cq_context {
+            Some(p) => p.as_ptr(),
+            None => std::ptr::null_mut(),
+        };
+        let channel = match channel {
+            Some(p) => p.ibv_comp_channel.as_ptr(),
+            None => std::ptr::null_mut(),
+        };
+
+        let ibv_cq = unsafe {
+            ffi::ibv_create_cq(
+                context.ibv_context.as_ptr(),
+                cqe,
+                cq_context as *mut c_void,
+                channel,
+                comp_vector,
+            )
+        };
+        if ibv_cq.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(Self {
+                ibv_cq: NonNull::new_unchecked(ibv_cq),
+            })
+        }
+    }
+
+    pub fn poll<'a>(&self, cqe_arr: &'a mut [IbvWc]) -> Result<&'a [IbvWc], ()> {
+        let n = unsafe {
+            let ibv_poll_cq = (*(*self.ibv_cq.as_ptr()).context).ops.poll_cq.unwrap();
+            ibv_poll_cq(
+                self.ibv_cq.as_ptr(),
+                cqe_arr.len() as i32,
+                cqe_arr.as_mut_ptr(),
+            )
+        };
+        if n < 0 {
+            return Err(());
+        }
+        Ok(&mut cqe_arr[0..n as usize])
+    }
+
+    pub fn resize(&self, cqe: i32) -> Result<(), IOError> {
+        let ret = unsafe { ffi::ibv_resize_cq(self.ibv_cq.as_ptr(), cqe) };
+        if ret != 0 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+impl Drop for IbvCq {
+    fn drop(&mut self) {
+        let ret = unsafe { ffi::ibv_destroy_cq(self.ibv_cq.as_ptr()) };
+        if ret != -1 {
+            panic!("ibv_destroy_cq(). errno: {}", IOError::last_os_error());
+        }
+    }
+}
+
+unsafe impl Send for IbvCq {}
+unsafe impl Sync for IbvCq {}
+
+#[derive(Clone)]
+pub struct IbvCompChannel {
+    ibv_comp_channel: NonNull<ffi::ibv_comp_channel>,
+}
+impl IbvCompChannel {
+    pub fn new(context: &IbvContext) -> Result<Self, IOError> {
+        let ibv_comp_channel =
+            unsafe { ffi::ibv_create_comp_channel(context.ibv_context.as_ptr()) };
+        if ibv_comp_channel.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(Self {
+                ibv_comp_channel: NonNull::new_unchecked(ibv_comp_channel),
+            })
+        }
+    }
+}
+impl Drop for IbvCompChannel {
+    fn drop(&mut self) {
+        let ret = unsafe { ffi::ibv_destroy_comp_channel(self.ibv_comp_channel.as_ptr()) };
+        if ret != 0 {
+            panic!(
+                "ibv_destroy_comp_channel(). errno: {}",
+                IOError::last_os_error()
+            );
+        }
+    }
+}
 impl IbvDeviceAttr {
     #[inline(always)]
     pub fn get_fw_ver(&self) -> &str {
@@ -451,6 +622,16 @@ pub mod ibv_port_cap_flags2 {
     pub const IBV_PORT_SWITCH_PORT_STATE_TABLE_SUP: u16 = 8;
     pub const IBV_PORT_LINK_WIDTH_2X_SUP: u16 = 16;
     pub const IBV_PORT_LINK_SPEED_HDR_SUP: u16 = 32;
+}
+impl IbvGid {
+    #[inline(always)]
+    pub fn get_subnet_prefix(&self) -> u64 {
+        unsafe { self.global.subnet_prefix }
+    }
+    #[inline(always)]
+    pub fn get_interface_id(&self) -> u64 {
+        unsafe { self.global.interface_id }
+    }
 }
 pub fn ibv_fork_init() -> Result<(), IOError> {
     let ret = unsafe { ffi::ibv_fork_init() };
