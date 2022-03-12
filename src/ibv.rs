@@ -279,6 +279,209 @@ impl Drop for IbvCompChannel {
         }
     }
 }
+
+#[derive(Clone)]
+pub struct IbvMr {
+    ibv_mr: NonNull<ffi::ibv_mr>,
+}
+
+impl IbvMr {
+    pub fn new(pd: &IbvPd, region: &[u8], access: i32) -> Result<IbvMr, IOError> {
+        let ibv_mr = unsafe {
+            ffi::ibv_reg_mr(
+                pd.ibv_pd.as_ptr(),
+                region.as_ptr() as *mut c_void,
+                region.len() as u64,
+                access,
+            )
+        };
+        if ibv_mr.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(IbvMr {
+                ibv_mr: NonNull::new_unchecked(ibv_mr),
+            })
+        }
+    }
+    pub fn new_raw(
+        pd: &IbvPd,
+        addr: *mut c_void,
+        length: usize,
+        access: i32,
+    ) -> Result<IbvMr, IOError> {
+        let ibv_mr = unsafe { ffi::ibv_reg_mr(pd.ibv_pd.as_ptr(), addr, length as u64, access) };
+        if ibv_mr.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(IbvMr {
+                ibv_mr: NonNull::new_unchecked(ibv_mr),
+            })
+        }
+    }
+    #[inline(always)]
+    pub fn get_rkey(&self) -> u32 {
+        return unsafe { self.ibv_mr.as_ref().rkey };
+    }
+    #[inline(always)]
+    pub fn get_lkey(&self) -> u32 {
+        return unsafe { self.ibv_mr.as_ref().lkey };
+    }
+}
+
+impl Drop for IbvMr {
+    fn drop(&mut self) {
+        let ret = unsafe { ffi::ibv_dereg_mr(self.ibv_mr.as_ptr()) };
+        if ret != 0 {
+            panic!("ibv_dereg_mr(). errno: {}", IOError::last_os_error());
+        }
+    }
+}
+unsafe impl Send for IbvMr {}
+unsafe impl Sync for IbvMr {}
+
+#[derive(Clone)]
+pub struct IbvQp {
+    ibv_qp: NonNull<ffi::ibv_qp>,
+}
+impl IbvQp {
+    pub fn new(
+        pd: &IbvPd,
+        send_cq: &IbvCq,
+        recv_cq: &IbvCq,
+        sq_sig_all: i32,
+        max_send_wr: u32,
+        max_recv_wr: u32,
+        max_send_sge: u32,
+        max_recv_sge: u32,
+        max_inline_data: u32,
+    ) -> Result<Self, IOError> {
+        let mut qp_init_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_init_attr>() };
+        qp_init_attr.qp_type = ibv_qp_type::IBV_QPT_RC;
+        qp_init_attr.sq_sig_all = sq_sig_all; // set to 0 to avoid CQE for every SR
+        qp_init_attr.send_cq = send_cq.ibv_cq.as_ptr();
+        qp_init_attr.recv_cq = recv_cq.ibv_cq.as_ptr();
+        qp_init_attr.cap.max_send_wr = max_send_wr;
+        qp_init_attr.cap.max_recv_wr = max_recv_wr;
+        qp_init_attr.cap.max_send_sge = max_send_sge;
+        qp_init_attr.cap.max_recv_sge = max_recv_sge;
+        qp_init_attr.cap.max_inline_data = max_inline_data;
+        qp_init_attr.srq = std::ptr::null_mut();
+        let ibv_qp = unsafe { ffi::ibv_create_qp(pd.ibv_pd.as_ptr(), &mut qp_init_attr as *mut _) };
+        if ibv_qp.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(Self {
+                ibv_qp: NonNull::new_unchecked(ibv_qp),
+            })
+        }
+    }
+    pub fn modify_reset2init(&self, port_num: u8) -> Result<(), IOError> {
+        let mut qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
+        qp_attr.qp_state = IBV_QPS_INIT;
+        qp_attr.pkey_index = 0;
+        qp_attr.port_num = port_num;
+        qp_attr.qp_access_flags = ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
+            | ibv_access_flags::IBV_ACCESS_REMOTE_READ
+            | ibv_access_flags::IBV_ACCESS_REMOTE_WRITE;
+        let ret = unsafe {
+            ffi::ibv_modify_qp(
+                self.p_ibv_qp.as_ptr(),
+                &mut qp_attr as *mut _,
+                (ibv_qp_attr_mask::IBV_QP_STATE.0
+                    | ibv_qp_attr_mask::IBV_QP_PKEY_INDEX.0
+                    | ibv_qp_attr_mask::IBV_QP_PORT.0
+                    | ibv_qp_attr_mask::IBV_QP_ACCESS_FLAGS.0) as i32,
+            )
+        };
+        if ret == -1 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(())
+    }
+    pub fn modify_init2rtr(
+        &self,
+
+        sl: u8,
+        port_num: u8,
+        remote_qpn: u32,
+        remote_psn: u32,
+        remote_lid: u16,
+    ) -> Result<(), IOError> {
+        let mut qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
+        qp_attr.qp_state = ibv_qp_state::IBV_QPS_RTR;
+        qp_attr.path_mtu = IBV_MTU_1024;
+        qp_attr.dest_qp_num = remote_qpn;
+        qp_attr.rq_psn = remote_psn;
+        qp_attr.max_dest_rd_atomic = 1;
+        qp_attr.min_rnr_timer = 12;
+        qp_attr.ah_attr.is_global = 0;
+        qp_attr.ah_attr.dlid = remote_lid;
+        qp_attr.ah_attr.sl = sl;
+        qp_attr.ah_attr.src_path_bits = 0;
+        qp_attr.ah_attr.port_num = port_num;
+        let ret = unsafe {
+            ffi::ibv_modify_qp(
+                self.ibv_qp.as_ptr(),
+                &mut qp_attr as *mut _,
+                (ibv_qp_attr_mask::IBV_QP_STATE.0
+                    | ibv_qp_attr_mask::IBV_QP_AV.0
+                    | ibv_qp_attr_mask::IBV_QP_PATH_MTU.0
+                    | ibv_qp_attr_mask::IBV_QP_DEST_QPN.0
+                    | ibv_qp_attr_mask::IBV_QP_RQ_PSN.0
+                    | ibv_qp_attr_mask::IBV_QP_MAX_DEST_RD_ATOMIC.0
+                    | ibv_qp_attr_mask::IBV_QP_MIN_RNR_TIMER.0) as i32,
+            )
+        };
+        if ret == -1 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(())
+    }
+
+    pub fn modify_rtr2rts(&self, psn: u32) -> Result<(), IOError> {
+        let mut qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
+        qp_attr.qp_state = ibv_qp_state::IBV_QPS_RTS;
+        qp_attr.timeout = 14;
+        qp_attr.retry_cnt = 7;
+        qp_attr.rnr_retry = 7;
+        qp_attr.sq_psn = psn;
+        qp_attr.max_rd_atomic = 1;
+        let ret = unsafe {
+            ffi::ibv_modify_qp(
+                self.ibv_qp.as_ptr(),
+                &mut qp_attr as *mut _,
+                (ibv_qp_attr_mask::IBV_QP_STATE.0
+                    | ibv_qp_attr_mask::IBV_QP_TIMEOUT.0
+                    | ibv_qp_attr_mask::IBV_QP_RETRY_CNT.0
+                    | ibv_qp_attr_mask::IBV_QP_RNR_RETRY.0
+                    | ibv_qp_attr_mask::IBV_QP_SQ_PSN.0
+                    | ibv_qp_attr_mask::IBV_QP_MAX_QP_RD_ATOMIC.0) as i32,
+            )
+        };
+        if ret == -1 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(())
+    }
+    #[inline(always)]
+    pub fn get_qpn(&self) -> u32 {
+        unsafe { self.ibv_qp.as_ref().qp_num }
+    }
+}
+impl Drop for IbvQp {
+    fn drop(&mut self) {
+        let ret = unsafe { ffi::ibv_destroy_qp(self.ibv_qp.as_ptr()) };
+        if ret == -1 {
+            panic!("ibv_destroy_qp() error");
+        }
+    }
+}
+unsafe impl Send for IbvQp {}
+unsafe impl Sync for IbvQp {}
+
 impl IbvDeviceAttr {
     #[inline(always)]
     pub fn get_fw_ver(&self) -> &str {
@@ -633,6 +836,31 @@ impl IbvGid {
         unsafe { self.global.interface_id }
     }
 }
+
+pub mod ibv_access_flags {
+    use crate::ffi;
+
+    pub const IBV_ACCESS_LOCAL_WRITE: u32 = ffi::ibv_access_flags_IBV_ACCESS_LOCAL_WRITE;
+    pub const IBV_ACCESS_REMOTE_WRITE: u32 = ffi::ibv_access_flags_IBV_ACCESS_REMOTE_WRITE;
+    pub const IBV_ACCESS_REMOTE_READ: u32 = ffi::ibv_access_flags_IBV_ACCESS_REMOTE_READ;
+    pub const IBV_ACCESS_REMOTE_ATOMIC: u32 = ffi::ibv_access_flags_IBV_ACCESS_REMOTE_ATOMIC;
+    pub const IBV_ACCESS_MW_BIND: u32 = ffi::ibv_access_flags_IBV_ACCESS_MW_BIND;
+    pub const IBV_ACCESS_ZERO_BASED: u32 = ffi::ibv_access_flags_IBV_ACCESS_ZERO_BASED;
+    pub const IBV_ACCESS_ON_DEMAND: u32 = ffi::ibv_access_flags_IBV_ACCESS_ON_DEMAND;
+    pub const IBV_ACCESS_HUGETLB: u32 = ffi::ibv_access_flags_IBV_ACCESS_HUGETLB;
+    pub const IBV_ACCESS_RELAXED_ORDERING: u32 = ffi::ibv_access_flags_IBV_ACCESS_RELAXED_ORDERING;
+}
+pub mod ibv_qp_type {
+    use crate::ffi;
+    pub const IBV_QPT_RC: u32 = ffi::ibv_qp_type_IBV_QPT_RC;
+    pub const IBV_QPT_UC: u32 = ffi::ibv_qp_type_IBV_QPT_UC;
+    pub const IBV_QPT_UD: u32 = ffi::ibv_qp_type_IBV_QPT_UD;
+    pub const IBV_QPT_RAW_PACKET: u32 = ffi::ibv_qp_type_IBV_QPT_RAW_PACKET;
+    pub const IBV_QPT_XRC_SEND: u32 = ffi::ibv_qp_type_IBV_QPT_XRC_SEND;
+    pub const IBV_QPT_XRC_RECV: u32 = ffi::ibv_qp_type_IBV_QPT_XRC_RECV;
+    pub const IBV_QPT_DRIVER: u32 = ffi::ibv_qp_type_IBV_QPT_DRIVER;
+}
+
 pub fn ibv_fork_init() -> Result<(), IOError> {
     let ret = unsafe { ffi::ibv_fork_init() };
     if ret != 0 {
