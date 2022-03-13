@@ -1,3 +1,3 @@
-pub mod ibv;
 pub mod error;
-mod ffi;
+pub mod ffi;
+pub mod ibv;

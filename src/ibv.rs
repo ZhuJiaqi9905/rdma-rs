@@ -358,7 +358,7 @@ impl IbvQp {
         max_inline_data: u32,
     ) -> Result<Self, IOError> {
         let mut qp_init_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_init_attr>() };
-        qp_init_attr.qp_type = ibv_qp_type::IBV_QPT_RC;
+        qp_init_attr.qp_type = ffi::ibv_qp_type::IBV_QPT_RC;
         qp_init_attr.sq_sig_all = sq_sig_all; // set to 0 to avoid CQE for every SR
         qp_init_attr.send_cq = send_cq.ibv_cq.as_ptr();
         qp_init_attr.recv_cq = recv_cq.ibv_cq.as_ptr();
@@ -380,20 +380,21 @@ impl IbvQp {
     }
     pub fn modify_reset2init(&self, port_num: u8) -> Result<(), IOError> {
         let mut qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
-        qp_attr.qp_state = IBV_QPS_INIT;
+        qp_attr.qp_state = ffi::ibv_qp_state::IBV_QPS_INIT;
         qp_attr.pkey_index = 0;
         qp_attr.port_num = port_num;
-        qp_attr.qp_access_flags = ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
-            | ibv_access_flags::IBV_ACCESS_REMOTE_READ
-            | ibv_access_flags::IBV_ACCESS_REMOTE_WRITE;
+        qp_attr.qp_access_flags = ffi::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0
+            | ffi::ibv_access_flags::IBV_ACCESS_REMOTE_READ.0
+            | ffi::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE.0;
+
         let ret = unsafe {
             ffi::ibv_modify_qp(
-                self.p_ibv_qp.as_ptr(),
+                self.ibv_qp.as_ptr(),
                 &mut qp_attr as *mut _,
-                (ibv_qp_attr_mask::IBV_QP_STATE.0
-                    | ibv_qp_attr_mask::IBV_QP_PKEY_INDEX.0
-                    | ibv_qp_attr_mask::IBV_QP_PORT.0
-                    | ibv_qp_attr_mask::IBV_QP_ACCESS_FLAGS.0) as i32,
+                (ffi::ibv_qp_attr_mask::IBV_QP_STATE.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_PKEY_INDEX.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_PORT.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_ACCESS_FLAGS.0) as i32,
             )
         };
         if ret == -1 {
@@ -411,8 +412,8 @@ impl IbvQp {
         remote_lid: u16,
     ) -> Result<(), IOError> {
         let mut qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
-        qp_attr.qp_state = ibv_qp_state::IBV_QPS_RTR;
-        qp_attr.path_mtu = IBV_MTU_1024;
+        qp_attr.qp_state = ffi::ibv_qp_state::IBV_QPS_RTR;
+        qp_attr.path_mtu = ffi::ibv_mtu::IBV_MTU_1024;
         qp_attr.dest_qp_num = remote_qpn;
         qp_attr.rq_psn = remote_psn;
         qp_attr.max_dest_rd_atomic = 1;
@@ -426,13 +427,13 @@ impl IbvQp {
             ffi::ibv_modify_qp(
                 self.ibv_qp.as_ptr(),
                 &mut qp_attr as *mut _,
-                (ibv_qp_attr_mask::IBV_QP_STATE.0
-                    | ibv_qp_attr_mask::IBV_QP_AV.0
-                    | ibv_qp_attr_mask::IBV_QP_PATH_MTU.0
-                    | ibv_qp_attr_mask::IBV_QP_DEST_QPN.0
-                    | ibv_qp_attr_mask::IBV_QP_RQ_PSN.0
-                    | ibv_qp_attr_mask::IBV_QP_MAX_DEST_RD_ATOMIC.0
-                    | ibv_qp_attr_mask::IBV_QP_MIN_RNR_TIMER.0) as i32,
+                (ffi::ibv_qp_attr_mask::IBV_QP_STATE.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_AV.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_PATH_MTU.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_DEST_QPN.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_RQ_PSN.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_MAX_DEST_RD_ATOMIC.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_MIN_RNR_TIMER.0) as i32,
             )
         };
         if ret == -1 {
@@ -443,7 +444,7 @@ impl IbvQp {
 
     pub fn modify_rtr2rts(&self, psn: u32) -> Result<(), IOError> {
         let mut qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
-        qp_attr.qp_state = ibv_qp_state::IBV_QPS_RTS;
+        qp_attr.qp_state = ffi::ibv_qp_state::IBV_QPS_RTS;
         qp_attr.timeout = 14;
         qp_attr.retry_cnt = 7;
         qp_attr.rnr_retry = 7;
@@ -453,12 +454,12 @@ impl IbvQp {
             ffi::ibv_modify_qp(
                 self.ibv_qp.as_ptr(),
                 &mut qp_attr as *mut _,
-                (ibv_qp_attr_mask::IBV_QP_STATE.0
-                    | ibv_qp_attr_mask::IBV_QP_TIMEOUT.0
-                    | ibv_qp_attr_mask::IBV_QP_RETRY_CNT.0
-                    | ibv_qp_attr_mask::IBV_QP_RNR_RETRY.0
-                    | ibv_qp_attr_mask::IBV_QP_SQ_PSN.0
-                    | ibv_qp_attr_mask::IBV_QP_MAX_QP_RD_ATOMIC.0) as i32,
+                (ffi::ibv_qp_attr_mask::IBV_QP_STATE.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_TIMEOUT.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_RETRY_CNT.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_RNR_RETRY.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_SQ_PSN.0
+                    | ffi::ibv_qp_attr_mask::IBV_QP_MAX_QP_RD_ATOMIC.0) as i32,
             )
         };
         if ret == -1 {
@@ -653,50 +654,19 @@ impl IbvDeviceAttr {
         self.phys_port_cnt
     }
 }
-pub mod ibv_device_cap_flags {
-    pub const IBV_DEVICE_RESIZE_MAX_WR: u32 = 1;
-    pub const IBV_DEVICE_BAD_PKEY_CNTR: u32 = 2;
-    pub const IBV_DEVICE_BAD_QKEY_CNTR: u32 = 4;
-    pub const IBV_DEVICE_RAW_MULTI: u32 = 8;
-    pub const IBV_DEVICE_AUTO_PATH_MIG: u32 = 16;
-    pub const IBV_DEVICE_CHANGE_PHY_PORT: u32 = 32;
-    pub const IBV_DEVICE_UD_AV_PORT_ENFORCE: u32 = 64;
-    pub const IBV_DEVICE_CURR_QP_STATE_MOD: u32 = 128;
-    pub const IBV_DEVICE_SHUTDOWN_PORT: u32 = 256;
-    pub const IBV_DEVICE_INIT_TYPE: u32 = 512;
-    pub const IBV_DEVICE_PORT_ACTIVE_EVENT: u32 = 1024;
-    pub const IBV_DEVICE_SYS_IMAGE_GUID: u32 = 2048;
-    pub const IBV_DEVICE_RC_RNR_NAK_GEN: u32 = 4096;
-    pub const IBV_DEVICE_SRQ_RESIZE: u32 = 8192;
-    pub const IBV_DEVICE_N_NOTIFY_CQ: u32 = 16384;
-    pub const IBV_DEVICE_MEM_WINDOW: u32 = 131072;
-    pub const IBV_DEVICE_UD_IP_CSUM: u32 = 262144;
-    pub const IBV_DEVICE_XRC: u32 = 1048576;
-    pub const IBV_DEVICE_MEM_MGT_EXTENSIONS: u32 = 2097152;
-    pub const IBV_DEVICE_MEM_WINDOW_TYPE_2A: u32 = 8388608;
-    pub const IBV_DEVICE_MEM_WINDOW_TYPE_2B: u32 = 16777216;
-    pub const IBV_DEVICE_RC_IP_CSUM: u32 = 33554432;
-    pub const IBV_DEVICE_RAW_IP_CSUM: u32 = 67108864;
-    pub const IBV_DEVICE_MANAGED_FLOW_STEERING: u32 = 536870912;
-}
-pub mod ibv_atomic_cap {
-    pub const IBV_ATOMIC_NONE: u32 = 0;
-    pub const IBV_ATOMIC_HCA: u32 = 1;
-    pub const IBV_ATOMIC_GLOB: u32 = 2;
-}
 
 impl IbvPortAttr {
     #[inline(always)]
-    pub fn get_state(&self) -> IbvPortState {
-        IbvPortState::try_from(self.state).unwrap()
+    pub fn get_state(&self) -> u32 {
+        self.state
     }
     #[inline(always)]
-    pub fn get_max_mtu(&self) -> IbvMtu {
-        IbvMtu::try_from(self.max_mtu).unwrap()
+    pub fn get_max_mtu(&self) -> u32 {
+        self.max_mtu
     }
     #[inline(always)]
-    pub fn get_active_mtu(&self) -> IbvMtu {
-        IbvMtu::try_from(self.active_mtu).unwrap()
+    pub fn get_active_mtu(&self) -> u32 {
+        self.active_mtu
     }
     #[inline(always)]
     pub fn get_gid_tbl_len(&self) -> i32 {
@@ -772,60 +742,6 @@ impl IbvPortAttr {
     }
 }
 
-#[derive(TryFromPrimitive)]
-#[repr(u32)]
-pub enum IbvPortState {
-    IbvPortNop = 0,
-    IbvPortDown = 1,
-    IbvPortInit = 2,
-    IbvPortArmed = 3,
-    IbvPortActive = 4,
-    IbvPortActiveDefer = 5,
-}
-
-#[derive(TryFromPrimitive)]
-#[repr(u32)]
-pub enum IbvMtu {
-    IbvMtu256 = 1,
-    IbvMtu512 = 2,
-    IbvMtu1024 = 3,
-    IbvMtu2048 = 4,
-    IbvMtu4096 = 5,
-}
-pub mod ibv_port_cap_flags {
-    pub const IBV_PORT_SM: u32 = 2;
-    pub const IBV_PORT_NOTICE_SUP: u32 = 4;
-    pub const IBV_PORT_TRAP_SUP: u32 = 8;
-    pub const IBV_PORT_OPT_IPD_SUP: u32 = 16;
-    pub const IBV_PORT_AUTO_MIGR_SUP: u32 = 32;
-    pub const IBV_PORT_SL_MAP_SUP: u32 = 64;
-    pub const IBV_PORT_MKEY_NVRAM: u32 = 128;
-    pub const IBV_PORT_PKEY_NVRAM: u32 = 256;
-    pub const IBV_PORT_LED_INFO_SUP: u32 = 512;
-    pub const IBV_PORT_SYS_IMAGE_GUID_SUP: u32 = 2048;
-    pub const IBV_PORT_PKEY_SW_EXT_PORT_TRAP_SUP: u32 = 4096;
-    pub const IBV_PORT_EXTENDED_SPEEDS_SUP: u32 = 16384;
-    pub const IBV_PORT_CAP_MASK2_SUP: u32 = 32768;
-    pub const IBV_PORT_CM_SUP: u32 = 65536;
-    pub const IBV_PORT_SNMP_TUNNEL_SUP: u32 = 131072;
-    pub const IBV_PORT_REINIT_SUP: u32 = 262144;
-    pub const IBV_PORT_DEVICE_MGMT_SUP: u32 = 524288;
-    pub const IBV_PORT_VENDOR_CLASS_SUP: u32 = 1048576;
-    pub const IBV_PORT_DR_NOTICE_SUP: u32 = 2097152;
-    pub const IBV_PORT_CAP_MASK_NOTICE_SUP: u32 = 4194304;
-    pub const IBV_PORT_BOOT_MGMT_SUP: u32 = 8388608;
-    pub const IBV_PORT_LINK_LATENCY_SUP: u32 = 16777216;
-    pub const IBV_PORT_CLIENT_REG_SUP: u32 = 33554432;
-    pub const IBV_PORT_IP_BASED_GIDS: u32 = 67108864;
-}
-pub mod ibv_port_cap_flags2 {
-    pub const IBV_PORT_SET_NODE_DESC_SUP: u16 = 1;
-    pub const IBV_PORT_INFO_EXT_SUP: u16 = 2;
-    pub const IBV_PORT_VIRT_SUP: u16 = 4;
-    pub const IBV_PORT_SWITCH_PORT_STATE_TABLE_SUP: u16 = 8;
-    pub const IBV_PORT_LINK_WIDTH_2X_SUP: u16 = 16;
-    pub const IBV_PORT_LINK_SPEED_HDR_SUP: u16 = 32;
-}
 impl IbvGid {
     #[inline(always)]
     pub fn get_subnet_prefix(&self) -> u64 {
@@ -835,30 +751,6 @@ impl IbvGid {
     pub fn get_interface_id(&self) -> u64 {
         unsafe { self.global.interface_id }
     }
-}
-
-pub mod ibv_access_flags {
-    use crate::ffi;
-
-    pub const IBV_ACCESS_LOCAL_WRITE: u32 = ffi::ibv_access_flags_IBV_ACCESS_LOCAL_WRITE;
-    pub const IBV_ACCESS_REMOTE_WRITE: u32 = ffi::ibv_access_flags_IBV_ACCESS_REMOTE_WRITE;
-    pub const IBV_ACCESS_REMOTE_READ: u32 = ffi::ibv_access_flags_IBV_ACCESS_REMOTE_READ;
-    pub const IBV_ACCESS_REMOTE_ATOMIC: u32 = ffi::ibv_access_flags_IBV_ACCESS_REMOTE_ATOMIC;
-    pub const IBV_ACCESS_MW_BIND: u32 = ffi::ibv_access_flags_IBV_ACCESS_MW_BIND;
-    pub const IBV_ACCESS_ZERO_BASED: u32 = ffi::ibv_access_flags_IBV_ACCESS_ZERO_BASED;
-    pub const IBV_ACCESS_ON_DEMAND: u32 = ffi::ibv_access_flags_IBV_ACCESS_ON_DEMAND;
-    pub const IBV_ACCESS_HUGETLB: u32 = ffi::ibv_access_flags_IBV_ACCESS_HUGETLB;
-    pub const IBV_ACCESS_RELAXED_ORDERING: u32 = ffi::ibv_access_flags_IBV_ACCESS_RELAXED_ORDERING;
-}
-pub mod ibv_qp_type {
-    use crate::ffi;
-    pub const IBV_QPT_RC: u32 = ffi::ibv_qp_type_IBV_QPT_RC;
-    pub const IBV_QPT_UC: u32 = ffi::ibv_qp_type_IBV_QPT_UC;
-    pub const IBV_QPT_UD: u32 = ffi::ibv_qp_type_IBV_QPT_UD;
-    pub const IBV_QPT_RAW_PACKET: u32 = ffi::ibv_qp_type_IBV_QPT_RAW_PACKET;
-    pub const IBV_QPT_XRC_SEND: u32 = ffi::ibv_qp_type_IBV_QPT_XRC_SEND;
-    pub const IBV_QPT_XRC_RECV: u32 = ffi::ibv_qp_type_IBV_QPT_XRC_RECV;
-    pub const IBV_QPT_DRIVER: u32 = ffi::ibv_qp_type_IBV_QPT_DRIVER;
 }
 
 pub fn ibv_fork_init() -> Result<(), IOError> {

@@ -20,6 +20,16 @@ fn main() {
         // The input header we would like to generate
         // bindings for.
         .header("wrapper.h")
+        .bitfield_enum("ibv_access_flags")
+        .bitfield_enum("ibv_device_cap_flags")
+        .bitfield_enum("ibv_port_cap_flags")
+        .bitfield_enum("ibv_port_cap_flags2")
+        .bitfield_enum("ibv_qp_attr_mask")
+        .constified_enum_module("ibv_atomic_cap")
+        .constified_enum_module("ibv_port_state")
+        .constified_enum_module("ibv_mtu")
+        .constified_enum_module("ibv_qp_type")
+        .constified_enum_module("ibv_qp_state")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
