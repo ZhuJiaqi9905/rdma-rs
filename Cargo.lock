@@ -263,6 +263,7 @@ dependencies = [
  "bindgen",
  "libc",
  "num_enum",
+ "thiserror",
 ]
 
 [[package]]

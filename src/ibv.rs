@@ -5,7 +5,6 @@ use std::ptr::NonNull;
 use std::slice;
 
 use libc::c_void;
-use num_enum::TryFromPrimitive;
 
 use crate::error::IbvContextError;
 use crate::ffi;
@@ -14,6 +13,10 @@ pub type IbvDeviceAttr = ffi::ibv_device_attr;
 pub type IbvPortAttr = ffi::ibv_port_attr;
 pub type IbvGid = ffi::ibv_gid;
 pub type IbvWc = ffi::ibv_wc;
+pub type IbvQpInitAttr = ffi::ibv_qp_init_attr;
+pub type IbvQpAttr = ffi::ibv_qp_attr;
+pub type IbvRecvWr = ffi::ibv_recv_wr;
+pub type IbvSendWr = ffi::ibv_send_wr;
 #[derive(Clone)]
 pub struct IbvContext {
     ibv_context: NonNull<ffi::ibv_context>,
@@ -188,7 +191,7 @@ impl IbvCq {
     ) -> Result<Self, IOError> {
         let cq_context = match cq_context {
             Some(p) => p.as_ptr(),
-            None => std::ptr::null_mut(),
+            None => std::ptr::null_mut::<T>(),
         };
         let channel = match channel {
             Some(p) => p.ibv_comp_channel.as_ptr(),
@@ -322,11 +325,19 @@ impl IbvMr {
     }
     #[inline(always)]
     pub fn get_rkey(&self) -> u32 {
-        return unsafe { self.ibv_mr.as_ref().rkey };
+        unsafe { self.ibv_mr.as_ref().rkey }
     }
     #[inline(always)]
     pub fn get_lkey(&self) -> u32 {
-        return unsafe { self.ibv_mr.as_ref().lkey };
+        unsafe { self.ibv_mr.as_ref().lkey }
+    }
+    #[inline(always)]
+    pub fn get_length(&self) -> u64 {
+        unsafe { self.ibv_mr.as_ref().length }
+    }
+    #[inline(always)]
+    pub fn get_handle(&self) -> u32 {
+        unsafe { self.ibv_mr.as_ref().handle }
     }
 }
 
@@ -369,6 +380,17 @@ impl IbvQp {
         qp_init_attr.cap.max_inline_data = max_inline_data;
         qp_init_attr.srq = std::ptr::null_mut();
         let ibv_qp = unsafe { ffi::ibv_create_qp(pd.ibv_pd.as_ptr(), &mut qp_init_attr as *mut _) };
+        if ibv_qp.is_null() {
+            return Err(IOError::last_os_error());
+        }
+        unsafe {
+            Ok(Self {
+                ibv_qp: NonNull::new_unchecked(ibv_qp),
+            })
+        }
+    }
+    pub fn with_attr(pd: &IbvPd, qp_init_attr: &mut IbvQpInitAttr) -> Result<Self, IOError> {
+        let ibv_qp = unsafe { ffi::ibv_create_qp(pd.ibv_pd.as_ptr(), qp_init_attr as *mut _) };
         if ibv_qp.is_null() {
             return Err(IOError::last_os_error());
         }
@@ -470,6 +492,58 @@ impl IbvQp {
     #[inline(always)]
     pub fn get_qpn(&self) -> u32 {
         unsafe { self.ibv_qp.as_ref().qp_num }
+    }
+    pub fn query(&self, attr_mask: u32) -> Result<(IbvQpAttr, IbvQpInitAttr), IOError> {
+        let mut ibv_qp_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_attr>() };
+        let mut ibv_qp_init_attr = unsafe { std::mem::zeroed::<ffi::ibv_qp_init_attr>() };
+        let ret = unsafe {
+            ffi::ibv_query_qp(
+                self.ibv_qp.as_ptr(),
+                &mut ibv_qp_attr as *mut _,
+                attr_mask as i32,
+                &mut ibv_qp_init_attr as *mut _,
+            )
+        };
+        if ret != 0 {
+            return Err(IOError::last_os_error());
+        }
+        return Ok((ibv_qp_attr, ibv_qp_init_attr));
+    }
+    pub fn post_send(
+        &self,
+        wr: &IbvSendWr,
+        bad_wr: *const *const IbvSendWr,
+    ) -> Result<(), IOError> {
+        let ibv_post_send = unsafe { (*(*self.ibv_qp.as_ptr()).context).ops.post_send.unwrap() };
+        let ret = unsafe {
+            ibv_post_send(
+                self.ibv_qp.as_ptr(),
+                wr as *const _ as *mut _,
+                bad_wr as *mut _,
+            )
+        };
+        if ret == -1 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(())
+    }
+    pub fn post_recv(
+        &self,
+        wr: &IbvRecvWr,
+        bad_wr: *const *const IbvRecvWr,
+    ) -> Result<(), IOError> {
+        let ibv_post_recv = unsafe { (*(*self.ibv_qp.as_ptr()).context).ops.post_recv.unwrap() };
+        let ret = unsafe {
+            ibv_post_recv(
+                self.ibv_qp.as_ptr(),
+                wr as *const _ as *mut _,
+                bad_wr as *mut _,
+            )
+        };
+        if ret == -1 {
+            return Err(IOError::last_os_error());
+        }
+        Ok(())
     }
 }
 impl Drop for IbvQp {
@@ -689,6 +763,10 @@ impl IbvPortAttr {
         self.qkey_viol_cntr
     }
     #[inline(always)]
+    pub fn get_pkey_tbl_len(&self) -> u16 {
+        self.pkey_tbl_len
+    }
+    #[inline(always)]
     pub fn get_lid(&self) -> u16 {
         self.lid
     }
@@ -753,6 +831,44 @@ impl IbvGid {
     }
 }
 
+impl IbvQpInitAttr {
+    #[inline(always)]
+    pub fn set_send_cq(&mut self, send_cq: &IbvCq) {
+        self.send_cq = send_cq.ibv_cq.as_ptr();
+    }
+    #[inline(always)]
+    pub fn set_recv_cq(&mut self, recv_cq: &IbvCq) {
+        self.recv_cq = recv_cq.ibv_cq.as_ptr();
+    }
+    #[inline(always)]
+    pub fn set_max_send_wr(&mut self, max_send_wr: u32) {
+        self.cap.max_send_wr = max_send_wr;
+    }
+    #[inline(always)]
+    pub fn set_max_recv_wr(&mut self, max_recv_wr: u32) {
+        self.cap.max_recv_wr = max_recv_wr;
+    }
+    #[inline(always)]
+    pub fn set_max_send_sge(&mut self, max_send_sge: u32) {
+        self.cap.max_send_sge = max_send_sge;
+    }
+    #[inline(always)]
+    pub fn set_max_recv_sge(&mut self, max_recv_sge: u32) {
+        self.cap.max_recv_sge = max_recv_sge;
+    }
+    #[inline(always)]
+    pub fn set_max_inine_data(&mut self, max_inline_data: u32) {
+        self.cap.max_inline_data = max_inline_data;
+    }
+    #[inline(always)]
+    pub fn set_qp_type(&mut self, qp_type: u32) {
+        self.qp_type = qp_type;
+    }
+    #[inline(always)]
+    pub fn set_sq_sig_all(&mut self, sq_sig_all: i32) {
+        self.sq_sig_all = sq_sig_all;
+    }
+}
 pub fn ibv_fork_init() -> Result<(), IOError> {
     let ret = unsafe { ffi::ibv_fork_init() };
     if ret != 0 {

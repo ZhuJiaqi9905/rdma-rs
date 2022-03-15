@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 libc = "0.2"
 num_enum = "0.5.7"
+thiserror = "1.0"
 [build-dependencies]
 bindgen = "0.59.2"
