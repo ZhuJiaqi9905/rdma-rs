@@ -30,6 +30,7 @@ fn main() {
         .constified_enum_module("ibv_mtu")
         .constified_enum_module("ibv_qp_type")
         .constified_enum_module("ibv_qp_state")
+        .constified_enum_module("ibv_wr_opcode")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
