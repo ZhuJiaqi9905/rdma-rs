@@ -8,7 +8,7 @@ use libc::c_void;
 
 use crate::error::IbvContextError;
 use crate::ffi;
-
+use crate::ffi::ibv_access_flags;
 pub type IbvDeviceAttr = ffi::ibv_device_attr;
 pub type IbvPortAttr = ffi::ibv_port_attr;
 pub type IbvGid = ffi::ibv_gid;
@@ -289,13 +289,13 @@ pub struct IbvMr {
 }
 
 impl IbvMr {
-    pub fn new(pd: &IbvPd, region: &[u8], access: i32) -> Result<IbvMr, IOError> {
+    pub fn new(pd: &IbvPd, region: &[u8], access: ibv_access_flags) -> Result<IbvMr, IOError> {
         let ibv_mr = unsafe {
             ffi::ibv_reg_mr(
                 pd.ibv_pd.as_ptr(),
                 region.as_ptr() as *mut c_void,
                 region.len() as u64,
-                access,
+                access.0 as i32,
             )
         };
         if ibv_mr.is_null() {
