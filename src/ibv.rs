@@ -75,20 +75,6 @@ impl IbvContext {
         }
         Ok(device_attr)
     }
-    // pub fn get_lid(&self, port_num: u8) -> Result<u16, IOError> {
-    //     let mut port_attr = unsafe { std::mem::zeroed::<IbvPortAttr>() };
-    //     let ret = unsafe {
-    //         ffi::ibv_query_port(
-    //             self.ibv_context.as_ptr(),
-    //             port_num,
-    //             &mut port_attr as *mut _ as *mut ffi::_compat_ibv_port_attr,
-    //         )
-    //     };
-    //     if ret == -1 {
-    //         return Err(IOError::last_os_error());
-    //     }
-    //     Ok(port_attr.lid)
-    // }
     pub fn query_port(&self, port_num: u8) -> Result<IbvPortAttr, IOError> {
         let mut port_attr = unsafe { std::mem::zeroed::<IbvPortAttr>() };
         let ret = unsafe {
@@ -244,7 +230,7 @@ impl IbvCq {
 impl Drop for IbvCq {
     fn drop(&mut self) {
         let ret = unsafe { ffi::ibv_destroy_cq(self.ibv_cq.as_ptr()) };
-        if ret != -1 {
+        if ret != 0 {
             panic!("ibv_destroy_cq(). errno: {}", IOError::last_os_error());
         }
     }
@@ -324,19 +310,19 @@ impl IbvMr {
         }
     }
     #[inline(always)]
-    pub fn get_rkey(&self) -> u32 {
+    pub fn rkey(&self) -> u32 {
         unsafe { self.ibv_mr.as_ref().rkey }
     }
     #[inline(always)]
-    pub fn get_lkey(&self) -> u32 {
+    pub fn lkey(&self) -> u32 {
         unsafe { self.ibv_mr.as_ref().lkey }
     }
     #[inline(always)]
-    pub fn get_length(&self) -> u64 {
+    pub fn length(&self) -> u64 {
         unsafe { self.ibv_mr.as_ref().length }
     }
     #[inline(always)]
-    pub fn get_handle(&self) -> u32 {
+    pub fn handle(&self) -> u32 {
         unsafe { self.ibv_mr.as_ref().handle }
     }
 }
@@ -490,7 +476,7 @@ impl IbvQp {
         Ok(())
     }
     #[inline(always)]
-    pub fn get_qpn(&self) -> u32 {
+    pub fn qpn(&self) -> u32 {
         unsafe { self.ibv_qp.as_ref().qp_num }
     }
     pub fn query(&self, attr_mask: u32) -> Result<(IbvQpAttr, IbvQpInitAttr), IOError> {
@@ -559,7 +545,7 @@ unsafe impl Sync for IbvQp {}
 
 impl IbvDeviceAttr {
     #[inline(always)]
-    pub fn get_fw_ver(&self) -> &str {
+    pub fn fw_ver(&self) -> &str {
         let mut i = 0;
         while i < self.fw_ver.len() {
             if self.fw_ver[i] as u8 == b'\0' {
@@ -572,234 +558,234 @@ impl IbvDeviceAttr {
         cstr.to_str().unwrap()
     }
     #[inline(always)]
-    pub fn get_node_guid(&self) -> u64 {
+    pub fn node_guid(&self) -> u64 {
         self.node_guid
     }
     #[inline(always)]
-    pub fn get_sys_image_guid(&self) -> u64 {
+    pub fn sys_image_guid(&self) -> u64 {
         self.sys_image_guid
     }
     #[inline(always)]
-    pub fn get_max_mr_size(&self) -> u64 {
+    pub fn max_mr_size(&self) -> u64 {
         self.max_mr_size
     }
     #[inline(always)]
-    pub fn get_page_size_cap(&self) -> u64 {
+    pub fn page_size_cap(&self) -> u64 {
         self.page_size_cap
     }
     #[inline(always)]
-    pub fn get_vendor_id(&self) -> u32 {
+    pub fn vendor_id(&self) -> u32 {
         self.vendor_id
     }
     #[inline(always)]
-    pub fn get_vendor_part_id(&self) -> u32 {
+    pub fn vendor_part_id(&self) -> u32 {
         self.vendor_part_id
     }
     #[inline(always)]
-    pub fn get_hw_ver(&self) -> u32 {
+    pub fn hw_ver(&self) -> u32 {
         self.hw_ver
     }
     #[inline(always)]
-    pub fn get_max_qp(&self) -> i32 {
+    pub fn max_qp(&self) -> i32 {
         self.max_qp
     }
     #[inline(always)]
-    pub fn get_max_qp_wr(&self) -> i32 {
+    pub fn max_qp_wr(&self) -> i32 {
         self.max_qp_wr
     }
     #[inline(always)]
-    pub fn get_device_cap_flags(&self) -> u32 {
+    pub fn device_cap_flags(&self) -> u32 {
         self.device_cap_flags
     }
     #[inline(always)]
-    pub fn get_max_sge(&self) -> i32 {
+    pub fn max_sge(&self) -> i32 {
         self.max_sge
     }
     #[inline(always)]
-    pub fn get_max_sge_rd(&self) -> i32 {
+    pub fn max_sge_rd(&self) -> i32 {
         self.max_sge_rd
     }
     #[inline(always)]
-    pub fn get_max_cq(&self) -> i32 {
+    pub fn max_cq(&self) -> i32 {
         self.max_cq
     }
     #[inline(always)]
-    pub fn get_max_cqe(&self) -> i32 {
+    pub fn max_cqe(&self) -> i32 {
         self.max_cqe
     }
     #[inline(always)]
-    pub fn get_max_mr(&self) -> i32 {
+    pub fn max_mr(&self) -> i32 {
         self.max_mr
     }
     #[inline(always)]
-    pub fn get_max_pd(&self) -> i32 {
+    pub fn max_pd(&self) -> i32 {
         self.max_pd
     }
     #[inline(always)]
-    pub fn get_max_qp_rd_atom(&self) -> i32 {
+    pub fn max_qp_rd_atom(&self) -> i32 {
         self.max_qp_rd_atom
     }
     #[inline(always)]
-    pub fn get_max_ee_rd_atom(&self) -> i32 {
+    pub fn max_ee_rd_atom(&self) -> i32 {
         self.max_ee_rd_atom
     }
     #[inline(always)]
-    pub fn get_max_res_rd_atom(&self) -> i32 {
+    pub fn max_res_rd_atom(&self) -> i32 {
         self.max_res_rd_atom
     }
     #[inline(always)]
-    pub fn get_max_qp_init_rd_atom(&self) -> i32 {
+    pub fn max_qp_init_rd_atom(&self) -> i32 {
         self.max_qp_init_rd_atom
     }
     #[inline(always)]
-    pub fn get_max_ee_init_rd_atom(&self) -> i32 {
+    pub fn max_ee_init_rd_atom(&self) -> i32 {
         self.max_ee_init_rd_atom
     }
     #[inline(always)]
-    pub fn get_atomic_cap(&self) -> u32 {
+    pub fn atomic_cap(&self) -> u32 {
         self.atomic_cap
     }
     #[inline(always)]
-    pub fn get_max_ee(&self) -> i32 {
+    pub fn max_ee(&self) -> i32 {
         self.max_ee
     }
     #[inline(always)]
-    pub fn get_max_rdd(&self) -> i32 {
+    pub fn max_rdd(&self) -> i32 {
         self.max_rdd
     }
     #[inline(always)]
-    pub fn get_max_mw(&self) -> i32 {
+    pub fn max_mw(&self) -> i32 {
         self.max_mw
     }
     #[inline(always)]
-    pub fn get_max_raw_ipv6_pq(&self) -> i32 {
+    pub fn max_raw_ipv6_pq(&self) -> i32 {
         self.max_raw_ipv6_qp
     }
     #[inline(always)]
-    pub fn get_max_raw_ethy_qp(&self) -> i32 {
+    pub fn max_raw_ethy_qp(&self) -> i32 {
         self.max_raw_ethy_qp
     }
     #[inline(always)]
-    pub fn get_max_mcast_grp(&self) -> i32 {
+    pub fn max_mcast_grp(&self) -> i32 {
         self.max_mcast_grp
     }
     #[inline(always)]
-    pub fn get_max_mcast_qp_attach(&self) -> i32 {
+    pub fn max_mcast_qp_attach(&self) -> i32 {
         self.max_mcast_qp_attach
     }
     #[inline(always)]
-    pub fn get_max_total_mcast_qp_attach(&self) -> i32 {
+    pub fn max_total_mcast_qp_attach(&self) -> i32 {
         self.max_total_mcast_qp_attach
     }
     #[inline(always)]
-    pub fn get_max_ah(&self) -> i32 {
+    pub fn max_ah(&self) -> i32 {
         self.max_ah
     }
     #[inline(always)]
-    pub fn get_max_fmr(&self) -> i32 {
+    pub fn max_fmr(&self) -> i32 {
         self.max_fmr
     }
     #[inline(always)]
-    pub fn get_max_map_per_fmr(&self) -> i32 {
+    pub fn max_map_per_fmr(&self) -> i32 {
         self.max_map_per_fmr
     }
     #[inline(always)]
-    pub fn get_max_srq(&self) -> i32 {
+    pub fn max_srq(&self) -> i32 {
         self.max_srq
     }
     #[inline(always)]
-    pub fn get_max_srq_wr(&self) -> i32 {
+    pub fn max_srq_wr(&self) -> i32 {
         self.max_srq_wr
     }
     #[inline(always)]
-    pub fn get_max_srq_sge(&self) -> i32 {
+    pub fn max_srq_sge(&self) -> i32 {
         self.max_srq_sge
     }
     #[inline(always)]
-    pub fn get_max_pkeys(&self) -> u16 {
+    pub fn max_pkeys(&self) -> u16 {
         self.max_pkeys
     }
     #[inline(always)]
-    pub fn get_local_ca_ack_delay(&self) -> u8 {
+    pub fn local_ca_ack_delay(&self) -> u8 {
         self.local_ca_ack_delay
     }
     #[inline(always)]
-    pub fn get_phys_port_cnt(&self) -> u8 {
+    pub fn phys_port_cnt(&self) -> u8 {
         self.phys_port_cnt
     }
 }
 
 impl IbvPortAttr {
     #[inline(always)]
-    pub fn get_state(&self) -> u32 {
+    pub fn state(&self) -> u32 {
         self.state
     }
     #[inline(always)]
-    pub fn get_max_mtu(&self) -> u32 {
+    pub fn max_mtu(&self) -> u32 {
         self.max_mtu
     }
     #[inline(always)]
-    pub fn get_active_mtu(&self) -> u32 {
+    pub fn active_mtu(&self) -> u32 {
         self.active_mtu
     }
     #[inline(always)]
-    pub fn get_gid_tbl_len(&self) -> i32 {
+    pub fn gid_tbl_len(&self) -> i32 {
         self.gid_tbl_len
     }
     #[inline(always)]
-    pub fn get_port_cap_flags(&self) -> u32 {
+    pub fn port_cap_flags(&self) -> u32 {
         self.port_cap_flags
     }
     #[inline(always)]
-    pub fn get_max_msg_sz(&self) -> u32 {
+    pub fn max_msg_sz(&self) -> u32 {
         self.max_msg_sz
     }
     #[inline(always)]
-    pub fn get_bad_pkey_cntr(&self) -> u32 {
+    pub fn bad_pkey_cntr(&self) -> u32 {
         self.bad_pkey_cntr
     }
     #[inline(always)]
-    pub fn get_qkey_viol_cntr(&self) -> u32 {
+    pub fn qkey_viol_cntr(&self) -> u32 {
         self.qkey_viol_cntr
     }
     #[inline(always)]
-    pub fn get_pkey_tbl_len(&self) -> u16 {
+    pub fn pkey_tbl_len(&self) -> u16 {
         self.pkey_tbl_len
     }
     #[inline(always)]
-    pub fn get_lid(&self) -> u16 {
+    pub fn lid(&self) -> u16 {
         self.lid
     }
     #[inline(always)]
-    pub fn get_sm_lid(&self) -> u16 {
+    pub fn sm_lid(&self) -> u16 {
         self.sm_lid
     }
     #[inline(always)]
-    pub fn get_lmc(&self) -> u8 {
+    pub fn lmc(&self) -> u8 {
         self.lmc
     }
     #[inline(always)]
-    pub fn get_max_vl_num(&self) -> u8 {
+    pub fn max_vl_num(&self) -> u8 {
         self.max_vl_num
     }
     #[inline(always)]
-    pub fn get_sm_sl(&self) -> u8 {
+    pub fn sm_sl(&self) -> u8 {
         self.sm_sl
     }
     #[inline(always)]
-    pub fn get_subnet_timeout(&self) -> u8 {
+    pub fn subnet_timeout(&self) -> u8 {
         self.subnet_timeout
     }
     #[inline(always)]
-    pub fn get_init_type_reply(&self) -> u8 {
+    pub fn init_type_reply(&self) -> u8 {
         self.init_type_reply
     }
     #[inline(always)]
-    pub fn get_active_width(&self) -> u8 {
+    pub fn active_width(&self) -> u8 {
         self.active_width
     }
     #[inline(always)]
-    pub fn get_active_speed(&self) -> u8 {
+    pub fn active_speed(&self) -> u8 {
         self.active_speed
     }
     #[inline(always)]
@@ -807,26 +793,26 @@ impl IbvPortAttr {
         self.phys_state
     }
     #[inline(always)]
-    pub fn get_link_layer(&self) -> u8 {
+    pub fn link_layer(&self) -> u8 {
         self.link_layer
     }
     #[inline(always)]
-    pub fn get_flags(&self) -> u8 {
+    pub fn flags(&self) -> u8 {
         self.flags
     }
     #[inline(always)]
-    pub fn get_port_cap_flags2(&self) -> u16 {
+    pub fn port_cap_flags2(&self) -> u16 {
         self.port_cap_flags2
     }
 }
 
 impl IbvGid {
     #[inline(always)]
-    pub fn get_subnet_prefix(&self) -> u64 {
+    pub fn subnet_prefix(&self) -> u64 {
         unsafe { self.global.subnet_prefix }
     }
     #[inline(always)]
-    pub fn get_interface_id(&self) -> u64 {
+    pub fn interface_id(&self) -> u64 {
         unsafe { self.global.interface_id }
     }
 }
