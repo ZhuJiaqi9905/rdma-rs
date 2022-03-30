@@ -119,6 +119,9 @@ impl IbvContext {
         }
         Ok(pkey)
     }
+    pub fn as_mut_ptr(&self) -> *mut ffi::ibv_context {
+        self.ibv_context.as_ptr()
+    }
 }
 
 impl Drop for IbvContext {
@@ -148,6 +151,9 @@ impl IbvPd {
                 ibv_pd: NonNull::new_unchecked(ibv_pd),
             })
         }
+    }
+    pub fn as_mut_ptr(&self) -> *mut ffi::ibv_pd {
+        self.ibv_pd.as_ptr()
     }
 }
 
@@ -225,6 +231,9 @@ impl IbvCq {
         }
         Ok(())
     }
+    pub fn as_mut_ptr(&self) -> *mut ffi::ibv_cq {
+        self.ibv_cq.as_ptr()
+    }
 }
 
 impl Drop for IbvCq {
@@ -255,6 +264,9 @@ impl IbvCompChannel {
                 ibv_comp_channel: NonNull::new_unchecked(ibv_comp_channel),
             })
         }
+    }
+    pub fn as_mut_ptr(&self) -> *mut ffi::ibv_comp_channel {
+        self.ibv_comp_channel.as_ptr()
     }
 }
 impl Drop for IbvCompChannel {
@@ -308,6 +320,9 @@ impl IbvMr {
                 ibv_mr: NonNull::new_unchecked(ibv_mr),
             })
         }
+    }
+    pub fn as_mut_ptr(&self) -> *mut ffi::ibv_mr {
+        self.ibv_mr.as_ptr()
     }
     #[inline(always)]
     pub fn rkey(&self) -> u32 {
@@ -530,6 +545,9 @@ impl IbvQp {
             return Err(IOError::last_os_error());
         }
         Ok(())
+    }
+    pub fn as_mut_ptr(&self) -> *mut ffi::ibv_qp {
+        self.ibv_qp.as_ptr()
     }
 }
 impl Drop for IbvQp {
