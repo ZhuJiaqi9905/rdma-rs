@@ -408,7 +408,8 @@ impl IbvQp {
         qp_attr.port_num = port_num;
         qp_attr.qp_access_flags = ffi::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0
             | ffi::ibv_access_flags::IBV_ACCESS_REMOTE_READ.0
-            | ffi::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE.0;
+            | ffi::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE.0
+            | ffi::ibv_access_flags::IBV_ACCESS_REMOTE_ATOMIC.0;
 
         let ret = unsafe {
             ffi::ibv_modify_qp(
